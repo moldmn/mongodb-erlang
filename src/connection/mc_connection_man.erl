@@ -32,7 +32,7 @@ request_raw(Socket, Database, Request, NetModule) ->
   {ok, Packet} = NetModule:recv(Socket, 0, Timeout),
   ok = set_opts(Socket, NetModule, true),
   Diff = timer:now_diff(bws_utils:now_ts(), Start),
-  bws_metrics_man:db_request_time(Diff),
+  bws_metrics_man:db_socket_time(Diff),
   {Responses, _} = mc_worker_logic:decode_responses(Packet),
   {_, Reply} = hd(Responses),
   reply(Reply).
