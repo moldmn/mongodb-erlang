@@ -26,10 +26,13 @@ request_worker(Connection, Request) ->  %request to worker
 	ok | {non_neg_integer(), [map()]}.
 request_raw(Socket, Database, Request, NetModule) ->
   Timeout = mc_utils:get_timeout(),
+  Start = bws_utils:now_ts(),
   ok = set_opts(Socket, NetModule, false),
   {ok, _} = mc_worker_logic:make_request(Socket, NetModule, Database, Request),
   {ok, Packet} = NetModule:recv(Socket, 0, Timeout),
   ok = set_opts(Socket, NetModule, true),
+  Diff = timer:now_diff(bws_utils:now_ts(), Start),
+  bws_metrics_man:db_request_time(Diff),
   {Responses, _} = mc_worker_logic:decode_responses(Packet),
   {_, Reply} = hd(Responses),
   reply(Reply).
