@@ -83,10 +83,11 @@ handle_cast(_, State) ->
   {noreply, State}.
 
 %% @hidden
-handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorage}) when Net =:= tcp; Net =:= ssl ->
+handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorage, next_req_fun = Next}) when Net =:= tcp; Net =:= ssl ->
   Buffer = <<(State#state.buffer)/binary, Data/binary>>,
   {Responses, Pending} = mc_worker_logic:decode_responses(Buffer),
   UReqStor = mc_worker_logic:process_responses(Responses, RequestStorage),
+  Next(),
   {noreply, State#state{buffer = Pending, request_storage = UReqStor}};
 handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_closed ->
   {stop, tcp_closed, State};
@@ -111,7 +112,6 @@ process_read_request(Request, From, State =
       Next(),
       {reply, #reply{cursornotfound = false, queryerror = false, cursorid = 0, documents = [#{<<"ok">> => 1}]}, State};
     _ ->  %ordinary request with response
-      Next(),
       RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
       URStorage = RequestStorage#{Id => RespFun},
       {noreply, State#state{request_storage = URStorage}}
