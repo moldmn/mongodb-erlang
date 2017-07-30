@@ -60,7 +60,11 @@ gen_index_name(KeyOrder) ->
 
 make_request(Socket, NetModule, Database, Request) ->
   {Packet, Id} = encode_requests(Database, Request),
-  {NetModule:send(Socket, Packet), Id}.
+  Start = bws_utils:now_ts(),
+  Send = NetModule:send(Socket, Packet),
+  Diff = timer:now_diff(bws_utils:now_ts(), Start),
+  bws_metrics_man:db_socket_time(Diff),
+  {Send, Id}.
 
 update_dbcoll({Db, _}, Coll) -> {Db, Coll};
 update_dbcoll(_, Coll) -> Coll.
