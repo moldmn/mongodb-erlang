@@ -20,7 +20,11 @@
 -spec request_worker(pid(), mongo_protocol:message()) -> ok | {non_neg_integer(), [map()]}.
 request_worker(Connection, Request) ->  %request to worker
   Timeout = mc_utils:get_timeout(),
-  reply(gen_server:call(Connection, Request, Timeout)).
+  Start = bws_utils:now_ts(),
+  Call = gen_server:call(Connection, Request, Timeout),
+  Diff = timer:now_diff(bws_utils:now_ts(), Start),
+  bws_metrics_man:db_call_time(Diff),
+  reply(Call).
 
 -spec request_raw(port(), mc_worker_api:database(), mongo_protocol:message(), module()) -> 
 	ok | {non_neg_integer(), [map()]}.
