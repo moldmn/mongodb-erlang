@@ -112,6 +112,7 @@ process_read_request(Request, From, State =
       Next(),
       {reply, #reply{cursornotfound = false, queryerror = false, cursorid = 0, documents = [#{<<"ok">> => 1}]}, State};
     _ ->  %ordinary request with response
+      Next(),
       RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
       URStorage = RequestStorage#{Id => RespFun},
       {noreply, State#state{request_storage = URStorage}}
