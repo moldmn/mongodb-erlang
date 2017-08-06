@@ -110,6 +110,9 @@ process_read_request(Request, From, State =
     {<<"w">>, 0} -> %no concern request
       Next(),
       {reply, #reply{cursornotfound = false, queryerror = false, cursorid = 0, documents = [#{<<"ok">> => 1}]}, State};
+    {<<"w">>, 0, <<"j">>, false} -> %no concern request
+      Next(),
+      {reply, #reply{cursornotfound = false, queryerror = false, cursorid = 0, documents = [#{<<"ok">> => 1}]}, State};
     _ ->  %ordinary request with response
       Next(),
       RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
