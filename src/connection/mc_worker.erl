@@ -90,8 +90,8 @@ handle_cast(_, State) ->
 handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorage}) when Net =:= tcp; Net =:= ssl ->
   Buffer = <<(State#state.buffer)/binary, Data/binary>>,
   {Responses, Pending} = mc_worker_logic:decode_responses(Buffer),
-  UReqStor = mc_worker_logic:process_responses(Responses, RequestStorage),
-  {noreply, State#state{buffer = Pending, request_storage = UReqStor}};
+  mc_worker_logic:process_responses(Responses, RequestStorage),
+  {noreply, State#state{buffer = Pending}};
 handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_closed ->
   {stop, tcp_closed, State};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
@@ -120,8 +120,8 @@ process_read_request(Request, From, State =
     _ ->  %ordinary request with response
       Next(),
       RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
-      URStorage = ets:insert(RequestStorage, {Id, RespFun}),
-      {noreply, State#state{request_storage = URStorage}}
+      true = ets:insert(RequestStorage, {Id, RespFun}),
+      {noreply, State}
   end.
 
 %% @deprecated
@@ -143,8 +143,8 @@ process_write_request(Request, From,
   {ok, Id} = mc_worker_logic:make_request(
     Socket, NetModule, Db, [Request, ConfirmWrite]), % ordinary write request
   RespFun = mc_worker_logic:get_resp_fun(Request, From),
-  UReqStor = ets:insert(ReqStor, {Id, RespFun}),  % save function, which will be called on response
-  {noreply, State#state{request_storage = UReqStor}}.
+  true = ets:insert(ReqStor, {Id, RespFun}),  % save function, which will be called on response
+  {noreply, State}.
 
 %% @private
 get_query_selector(Query = #query{selector = Selector, sok_overriden = true}, CS) ->
