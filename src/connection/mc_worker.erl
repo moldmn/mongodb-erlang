@@ -14,7 +14,7 @@
 
 -record(state, {
   socket :: gen_tcp:socket() | ssl:sslsocket(),
-  request_storage = #{} :: map(),
+  request_storage,
   buffer = <<>> :: binary(),
   conn_state,
   next_req_fun :: fun(),
@@ -47,7 +47,11 @@ init(Options) ->
   Password = mc_utils:get_value(password, Options),
   NextReqFun = mc_utils:get_value(next_req_fun, Options, fun() -> ok end),
   mc_auth:auth(Socket, Login, Password, ConnState#conn_state.database, NetModule),
-  gen_server:enter_loop(?MODULE, [], #state{socket = Socket, conn_state = ConnState, net_module = NetModule, next_req_fun = NextReqFun}).
+
+  Storage = ets:new(storage, [set, private, {keypos, 1}]),
+  gen_server:enter_loop(?MODULE, [],
+    #state{socket = Socket, conn_state = ConnState, net_module = NetModule, next_req_fun = NextReqFun, request_storage = Storage})
+.
 
 handle_call(NewState = #conn_state{}, _, State = #state{conn_state = OldState}) ->  % update state, return old
   {reply, {ok, OldState}, State#state{conn_state = NewState}};
@@ -116,7 +120,7 @@ process_read_request(Request, From, State =
     _ ->  %ordinary request with response
       Next(),
       RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
-      URStorage = RequestStorage#{Id => RespFun},
+      URStorage = ets:insert(RequestStorage, {Id, RespFun}),
       {noreply, State#state{request_storage = URStorage}}
   end.
 
@@ -139,7 +143,7 @@ process_write_request(Request, From,
   {ok, Id} = mc_worker_logic:make_request(
     Socket, NetModule, Db, [Request, ConfirmWrite]), % ordinary write request
   RespFun = mc_worker_logic:get_resp_fun(Request, From),
-  UReqStor = ReqStor#{Id => RespFun},  % save function, which will be called on response
+  UReqStor = ets:insert(ReqStor, {Id, RespFun}),  % save function, which will be called on response
   {noreply, State#state{request_storage = UReqStor}}.
 
 %% @private

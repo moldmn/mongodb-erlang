@@ -39,11 +39,11 @@ get_resp_fun(Write, From) when is_record(Write, insert); is_record(Write, update
 process_responses(Responses, RequestStorage) ->
   lists:foldl(
     fun({Id, Response}, UReqStor) ->
-      case maps:find(Id, UReqStor) of
-        error -> % TODO: close any cursor that might be linked to this request ?
+      case ets:lookup(UReqStor, Id) of
+        [] -> % TODO: close any cursor that might be linked to this request ?
           UReqStor;
         {ok, Fun} ->
-          UpdReqStor = maps:remove(Id, UReqStor),
+          UpdReqStor = ets:delete(UReqStor, Id),
           try Fun(Response) % call on-response function
           catch _:_ -> ok
           end,
