@@ -18,7 +18,8 @@
   buffer = <<>> :: binary(),
   conn_state,
   next_req_fun :: fun(),
-  net_module :: ssl | get_tcp
+  net_module :: ssl | get_tcp,
+  read_worker
 }).
 
 -spec start_link(proplists:proplist()) -> {ok, pid()}.
@@ -48,10 +49,14 @@ init(Options) ->
   NextReqFun = mc_utils:get_value(next_req_fun, Options, fun() -> ok end),
   mc_auth:auth(Socket, Login, Password, ConnState#conn_state.database, NetModule),
 
-  Storage = ets:new(storage, [set, private, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
+  Storage = ets:new(storage, [set, public, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
+
+  ReadWorker = spawn_link(fun() -> read_worker(<<>>) end),
+
   erlang:send_after(1000, self(), size),
   gen_server:enter_loop(?MODULE, [],
-    #state{socket = Socket, conn_state = ConnState, net_module = NetModule, next_req_fun = NextReqFun, request_storage = Storage})
+    #state{socket = Socket, conn_state = ConnState, net_module = NetModule,
+      next_req_fun = NextReqFun, request_storage = Storage, read_worker = ReadWorker})
 .
 
 handle_call(NewState = #conn_state{}, _, State = #state{conn_state = OldState}) ->  % update state, return old
@@ -88,11 +93,9 @@ handle_cast(_, State) ->
   {noreply, State}.
 
 %% @hidden
-handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorage}) when Net =:= tcp; Net =:= ssl ->
-  Buffer = <<(State#state.buffer)/binary, Data/binary>>,
-  {Responses, Pending} = mc_worker_logic:decode_responses(Buffer),
-  mc_worker_logic:process_responses(Responses, RequestStorage),
-  {noreply, State#state{buffer = Pending}};
+handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorage, read_worker = ReadWorker}) when Net =:= tcp; Net =:= ssl ->
+  ReadWorker ! {Data, RequestStorage},
+  {noreply, State};
 handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_closed ->
   {stop, tcp_closed, State};
 handle_info(size, State = #state{request_storage = RequestStorage})->
@@ -182,3 +185,18 @@ get_set_opts_module(Options) ->
     true -> ssl;
     false -> gen_tcp
   end.
+
+read_worker(Buffer)->
+  Pending =
+  receive
+  {Data, RequestStorage} ->
+    Responses = <<Buffer/binary, Data/binary>>,
+    {Responses, PendingData} = mc_worker_logic:decode_responses(Responses),
+    mc_worker_logic:process_responses(Responses, RequestStorage),
+    PendingData
+  ;
+  _ ->
+    Buffer
+  end,
+  read_worker(Pending)
+.
