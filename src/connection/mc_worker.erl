@@ -48,7 +48,7 @@ init(Options) ->
   NextReqFun = mc_utils:get_value(next_req_fun, Options, fun() -> ok end),
   mc_auth:auth(Socket, Login, Password, ConnState#conn_state.database, NetModule),
 
-  Storage = ets:new(storage, [set, private, {keypos, 1}]),
+  Storage = ets:new(storage, [set, private, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
   erlang:send_after(1000, self(), size),
   gen_server:enter_loop(?MODULE, [],
     #state{socket = Socket, conn_state = ConnState, net_module = NetModule, next_req_fun = NextReqFun, request_storage = Storage})
@@ -97,7 +97,7 @@ handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_close
   {stop, tcp_closed, State};
 handle_info(size, State = #state{request_storage = RequestStorage})->
   Size = ets:info(RequestStorage,size),
-  bws_logger:log_info("storage size ~p",[Size]),
+  bws_logger:log_warn("storage size ~p",[Size]),
   erlang:send_after(1000, self(), size),
   {noreply, State};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
