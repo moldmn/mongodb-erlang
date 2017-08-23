@@ -190,8 +190,8 @@ read_worker(Buffer)->
   Pending =
   receive
   {Data, RequestStorage} ->
-    Responses = <<Buffer/binary, Data/binary>>,
-    {Responses, PendingData} = mc_worker_logic:decode_responses(Responses),
+    FullData = <<Buffer/binary, Data/binary>>,
+    {Responses, PendingData} = mc_worker_logic:decode_responses(FullData),
     mc_worker_logic:process_responses(Responses, RequestStorage),
     PendingData
   ;
