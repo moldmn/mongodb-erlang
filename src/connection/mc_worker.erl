@@ -117,6 +117,9 @@ process_read_request(Request, From, State =
   {UpdReq, Selector} = get_query_selector(Request, CS),
   {ok, Id} = mc_worker_logic:make_request(Socket, NetModule, CS#conn_state.database, UpdReq),
   case get_write_concern(Selector) of
+    {<<"w">>, 1} -> %no concern request
+      Next(),
+      {reply, #reply{cursornotfound = false, queryerror = false, cursorid = 0, documents = [#{<<"ok">> => 1}]}, State};
     {<<"w">>, 0} -> %no concern request
       Next(),
       {reply, #reply{cursornotfound = false, queryerror = false, cursorid = 0, documents = [#{<<"ok">> => 1}]}, State};
