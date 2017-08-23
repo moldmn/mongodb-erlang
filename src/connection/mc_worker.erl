@@ -97,7 +97,7 @@ handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_close
   {stop, tcp_closed, State};
 handle_info(size, State = #state{request_storage = RequestStorage})->
   Size = ets:info(RequestStorage,size),
-  bws_logger:log_warn("storage size ~p",[Size]),
+  io:format("storage size ~p~n",[Size]),
   erlang:send_after(1000, self(), size),
   {noreply, State};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
