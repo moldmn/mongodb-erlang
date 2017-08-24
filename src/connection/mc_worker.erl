@@ -98,10 +98,10 @@ handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorag
   {noreply, State};
 handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_closed ->
   {stop, tcp_closed, State};
-handle_info(size, State = #state{request_storage = RequestStorage})->
-  Size = ets:info(RequestStorage,size),
-  io:format("storage size ~p~n",[Size]),
-  erlang:send_after(1000, self(), size),
+handle_info(size, State = #state{request_storage = _RequestStorage})->
+  %Size = ets:info(RequestStorage,size),
+  %io:format("storage size ~p~n",[Size]),
+  %erlang:send_after(1000, self(), size),
   {noreply, State};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
   {stop, Reason, State}.
