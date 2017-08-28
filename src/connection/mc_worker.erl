@@ -3,7 +3,7 @@
 
 -include("mongo_protocol.hrl").
 
--export([start_link/1, disconnect/1, hibernate/1,request_id/0]).
+-export([start_link/1, disconnect/1, hibernate/1,request_id/1]).
 -export([
   init/1,
   handle_call/3,
@@ -19,7 +19,8 @@
   conn_state,
   next_req_fun :: fun(),
   net_module :: ssl | get_tcp,
-  read_worker
+  read_worker,
+  counter
 }).
 
 -define(MAX_INT32, 2147483647).
@@ -53,7 +54,7 @@ init(Options) ->
 
   Storage = ets:new(storage, [set, public, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
 
-  ?MODULE = ets:new(?MODULE, [named_table, public, {write_concurrency, true}, {read_concurrency, true}]),
+  Counter = ets:new(counter, [public, {write_concurrency, true}, {read_concurrency, true}]),
   ets:insert(?MODULE, [
     {requestid_counter, 0}
   ]),
@@ -63,7 +64,7 @@ init(Options) ->
   erlang:send_after(1000, self(), size),
   gen_server:enter_loop(?MODULE, [],
     #state{socket = Socket, conn_state = ConnState, net_module = NetModule,
-      next_req_fun = NextReqFun, request_storage = Storage, read_worker = ReadWorker})
+      next_req_fun = NextReqFun, request_storage = Storage, read_worker = ReadWorker, counter = Counter})
 .
 
 handle_call(NewState = #conn_state{}, _, State = #state{conn_state = OldState}) ->  % update state, return old
@@ -124,10 +125,10 @@ code_change(_Old, State, _Extra) ->
 
 %% @private
 process_read_request(Request, From, State =
-  #state{socket = Socket, request_storage = RequestStorage, conn_state = CS, net_module = NetModule, next_req_fun = Next}) ->
+  #state{socket = Socket, request_storage = RequestStorage, conn_state = CS, net_module = NetModule, next_req_fun = Next, counter = Counter}) ->
   {UpdReq, Selector} = get_query_selector(Request, CS),
   Start = bws_utils:now_ts(),
-  {ok, Id} = mc_worker_logic:make_request(Socket, NetModule, CS#conn_state.database, UpdReq),
+  {ok, Id} = mc_worker_logic:make_request(Socket, NetModule, CS#conn_state.database, UpdReq, Counter),
   case get_write_concern(Selector) of
     _ ->  %ordinary request with response
       Next(),
@@ -211,7 +212,6 @@ read_worker(Buffer)->
   read_worker(Pending)
 .
 
-%% @doc Fresh request id
--spec request_id() -> pos_integer().
-request_id() ->
-  ets:update_counter(?MODULE, requestid_counter, {2, 1, ?MAX_INT32, 0}).
+
+request_id(Storage) ->
+  ets:update_counter(Storage, requestid_counter, {2, 1, ?MAX_INT32, 0}).

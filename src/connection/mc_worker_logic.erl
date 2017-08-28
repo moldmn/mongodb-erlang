@@ -12,19 +12,30 @@
 -include("mongo_protocol.hrl").
 
 %% API
--export([encode_requests/2, decode_responses/1, process_responses/2]).
--export([gen_index_name/1, make_request/4, get_resp_fun/2, update_dbcoll/2, collection/1]).
+-export([encode_requests/2, encode_requests/3, decode_responses/1, process_responses/2]).
+-export([gen_index_name/1, make_request/4, make_request/5, get_resp_fun/2, update_dbcoll/2, collection/1]).
 
 encode_requests(Database, Request) when not is_list(Request) ->
   encode_requests(Database, [Request]);
 encode_requests(Database, Request) ->
   Build =
     fun(Message, {Bin, _}) ->
-      RequestId = mc_worker:request_id(),
+      RequestId =  mongo_id_server:request_id(),
       Payload = mongo_protocol:put_message(Database, Message, RequestId),
       {<<Bin/binary, (byte_size(Payload) + 4):32/little, Payload/binary>>, RequestId}
     end,
   lists:foldl(Build, {<<>>, 0}, Request).
+
+encode_requests(Database, Request, _RequestId) when not is_list(Request) ->
+  encode_requests(Database, [Request]);
+encode_requests(Database, Request, RequestId) ->
+  Build =
+    fun(Message, {Bin, _}) ->
+      Payload = mongo_protocol:put_message(Database, Message, RequestId),
+      {<<Bin/binary, (byte_size(Payload) + 4):32/little, Payload/binary>>, RequestId}
+    end,
+  lists:foldl(Build, {<<>>, 0}, Request).
+
 
 decode_responses(Data) ->
   decode_responses(Data, []).
@@ -62,6 +73,15 @@ gen_index_name(KeyOrder) ->
 
 make_request(Socket, NetModule, Database, Request) ->
   {Packet, Id} = encode_requests(Database, Request),
+  Start = bws_utils:now_ts(),
+  Send = NetModule:send(Socket, Packet),
+  Diff = timer:now_diff(bws_utils:now_ts(), Start),
+  bws_metrics_man:db_socket_time(Diff),
+  {Send, Id}.
+
+make_request(Socket, NetModule, Database, Request, CounterStorage) ->
+  RequestId = mc_worker:request_id(CounterStorage),
+  {Packet, Id} = encode_requests(Database, Request, RequestId),
   Start = bws_utils:now_ts(),
   Send = NetModule:send(Socket, Packet),
   Diff = timer:now_diff(bws_utils:now_ts(), Start),
