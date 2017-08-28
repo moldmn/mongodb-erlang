@@ -98,10 +98,11 @@ handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorag
   {noreply, State};
 handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_closed ->
   {stop, tcp_closed, State};
-handle_info(size, State = #state{request_storage = _RequestStorage})->
-  %Size = ets:info(RequestStorage,size),
+handle_info(size, State = #state{request_storage = RequestStorage})->
+  Size = ets:info(RequestStorage,size),
   %io:format("storage size ~p~n",[Size]),
   %erlang:send_after(1000, self(), size),
+  bws_metrics_man:db_worker_size(Size),
   {noreply, State};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
   {stop, Reason, State}.
@@ -118,12 +119,13 @@ code_change(_Old, State, _Extra) ->
 process_read_request(Request, From, State =
   #state{socket = Socket, request_storage = RequestStorage, conn_state = CS, net_module = NetModule, next_req_fun = Next}) ->
   {UpdReq, Selector} = get_query_selector(Request, CS),
+  Start = bws_utils:now_ts(),
   {ok, Id} = mc_worker_logic:make_request(Socket, NetModule, CS#conn_state.database, UpdReq),
   case get_write_concern(Selector) of
     _ ->  %ordinary request with response
       Next(),
       RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
-      true = ets:insert(RequestStorage, {Id, RespFun}),
+      true = ets:insert(RequestStorage, {Id, RespFun, Start}),
       {noreply, State}
   end.
 
@@ -136,6 +138,7 @@ process_write_request(Request, _,
 process_write_request(Request, From,
     State = #state{socket = Socket, conn_state = #conn_state{write_mode = Safe, database = Db}, request_storage = ReqStor, net_module = NetModule}) ->
   Params = case Safe of safe -> {}; {safe, Param} -> Param end,
+  Start = bws_utils:now_ts(),
   ConfirmWrite =
     #'query'
     { % check-write read request
@@ -146,7 +149,7 @@ process_write_request(Request, From,
   {ok, Id} = mc_worker_logic:make_request(
     Socket, NetModule, Db, [Request, ConfirmWrite]), % ordinary write request
   RespFun = mc_worker_logic:get_resp_fun(Request, From),
-  true = ets:insert(ReqStor, {Id, RespFun}),  % save function, which will be called on response
+  true = ets:insert(ReqStor, {Id, RespFun, Start}),  % save function, which will be called on response
   {noreply, State}.
 
 %% @private

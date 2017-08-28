@@ -41,7 +41,10 @@ process_responses(Responses, RequestStorage) ->
      case ets:lookup(RequestStorage, Id) of
      [] -> % TODO: close any cursor that might be linked to this request ?
        ok;
-     [{Id,Fun}] ->
+     [{Id,Fun,Start}] ->
+       Diff = timer:now_diff(bws_utils:now_ts(), Start),
+       bws_metrics_man:db_write_to_response_time(Diff),
+
        true = ets:delete(RequestStorage, Id),
        try Fun(Response) % call on-response function
        catch _:_ -> ok
