@@ -25,7 +25,7 @@
 }).
 
 -define(MAX_INT32, 2147483647).
--define(MAX_WORKER_SIZE, 300).
+-define(MAX_WORKER_SIZE, 250).
 
 -spec start_link(proplists:proplist()) -> {ok, pid()}.
 start_link(Options) ->
@@ -144,7 +144,7 @@ process_read_request(Request, From, State =
   Size = ets:info(RequestStorage,size),
 
   IsBlocked =
-  if Size > 500 ->
+  if Size > ?MAX_WORKER_SIZE ->
     true
   ;
   true ->
