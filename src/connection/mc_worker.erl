@@ -20,10 +20,12 @@
   next_req_fun :: fun(),
   net_module :: ssl | get_tcp,
   read_worker,
-  counter
+  counter,
+  is_blocked = false
 }).
 
 -define(MAX_INT32, 2147483647).
+-define(MAX_WORKER_SIZE, 300).
 
 -spec start_link(proplists:proplist()) -> {ok, pid()}.
 start_link(Options) ->
@@ -106,12 +108,21 @@ handle_info({Net, _Socket, Data}, State = #state{request_storage = RequestStorag
   {noreply, State};
 handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_closed ->
   {stop, tcp_closed, State};
-handle_info(size, State = #state{request_storage = RequestStorage})->
+handle_info(size, State = #state{request_storage = RequestStorage, is_blocked = IsBlocked, next_req_fun = Next})->
   Size = ets:info(RequestStorage,size),
   %io:format("storage size ~p~n",[Size]),
   bws_metrics_man:db_worker_size(Size),
+
+  NewState =
+  case IsBlocked of
+  true when Size < ?MAX_WORKER_SIZE ->
+    Next(),
+    State#state{is_blocked = false}
+  ;
+  false -> State
+  end,
   erlang:send_after(1000, self(), size),
-  {noreply, State};
+  {noreply, NewState};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
   {stop, Reason, State}.
 
@@ -126,16 +137,25 @@ code_change(_Old, State, _Extra) ->
 %% @private
 process_read_request(Request, From, State =
   #state{socket = Socket, request_storage = RequestStorage, conn_state = CS, net_module = NetModule, next_req_fun = Next, counter = Counter}) ->
-  {UpdReq, Selector} = get_query_selector(Request, CS),
+  {UpdReq, _Selector} = get_query_selector(Request, CS),
   Start = bws_utils:now_ts(),
   {ok, Id} = mc_worker_logic:make_request(Socket, NetModule, CS#conn_state.database, UpdReq, Counter),
-  case get_write_concern(Selector) of
-    _ ->  %ordinary request with response
-      Next(),
-      RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
-      true = ets:insert(RequestStorage, {Id, RespFun, Start}),
-      {noreply, State}
-  end.
+
+  Size = ets:info(RequestStorage,size),
+
+  IsBlocked =
+  if Size > 500 ->
+    true
+  ;
+  true ->
+    Next(),
+    false
+  end,
+
+  RespFun = mc_worker_logic:get_resp_fun(UpdReq, From),  % save function, which will be called on response
+  true = ets:insert(RequestStorage, {Id, RespFun, Start}),
+  {noreply, State#state{is_blocked = IsBlocked}}
+.
 
 %% @deprecated
 %% @private
@@ -167,11 +187,7 @@ get_query_selector(Query = #query{selector = Selector, sok_overriden = false}, _
   {Query, Selector};
 get_query_selector(GetMore, _) -> {GetMore, {}}.
 
-%% @private
-get_write_concern(#{<<"writeConcern">> := N}) -> N;
-get_write_concern(Selector) when is_tuple(Selector) ->
-  bson:lookup(<<"writeConcern">>, Selector);
-get_write_concern(_) -> undefined.
+
 
 %% @private
 %% Parses proplist to record
