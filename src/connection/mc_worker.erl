@@ -3,7 +3,7 @@
 
 -include("mongo_protocol.hrl").
 
--export([start_link/1, disconnect/1, hibernate/1]).
+-export([start_link/1, disconnect/1, hibernate/1,request_id/0]).
 -export([
   init/1,
   handle_call/3,
@@ -21,6 +21,8 @@
   net_module :: ssl | get_tcp,
   read_worker
 }).
+
+-define(MAX_INT32, 2147483647).
 
 -spec start_link(proplists:proplist()) -> {ok, pid()}.
 start_link(Options) ->
@@ -50,6 +52,11 @@ init(Options) ->
   mc_auth:auth(Socket, Login, Password, ConnState#conn_state.database, NetModule),
 
   Storage = ets:new(storage, [set, public, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
+
+  ?MODULE = ets:new(?MODULE, [named_table, public, {write_concurrency, true}, {read_concurrency, true}]),
+  ets:insert(?MODULE, [
+    {requestid_counter, 0}
+  ]),
 
   ReadWorker = spawn_link(fun() -> read_worker(<<>>) end),
 
@@ -101,8 +108,8 @@ handle_info({NetR, _Socket}, State) when NetR =:= tcp_closed; NetR =:= ssl_close
 handle_info(size, State = #state{request_storage = RequestStorage})->
   Size = ets:info(RequestStorage,size),
   %io:format("storage size ~p~n",[Size]),
-  %erlang:send_after(1000, self(), size),
   bws_metrics_man:db_worker_size(Size),
+  erlang:send_after(1000, self(), size),
   {noreply, State};
 handle_info({NetR, _Socket, Reason}, State) when NetR =:= tcp_errror; NetR =:= ssl_error ->
   {stop, Reason, State}.
@@ -203,3 +210,8 @@ read_worker(Buffer)->
   end,
   read_worker(Pending)
 .
+
+%% @doc Fresh request id
+-spec request_id() -> pos_integer().
+request_id() ->
+  ets:update_counter(?MODULE, requestid_counter, {2, 1, ?MAX_INT32, 0}).

@@ -20,7 +20,7 @@ encode_requests(Database, Request) when not is_list(Request) ->
 encode_requests(Database, Request) ->
   Build =
     fun(Message, {Bin, _}) ->
-      RequestId = mongo_id_server:request_id(),
+      RequestId = mc_worker:request_id(),
       Payload = mongo_protocol:put_message(Database, Message, RequestId),
       {<<Bin/binary, (byte_size(Payload) + 4):32/little, Payload/binary>>, RequestId}
     end,
