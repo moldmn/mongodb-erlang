@@ -55,7 +55,7 @@ init(Options) ->
   Storage = ets:new(storage, [set, public, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
 
   Counter = ets:new(counter, [public, {write_concurrency, true}, {read_concurrency, true}]),
-  ets:insert(?MODULE, [
+  ets:insert(Counter, [
     {requestid_counter, 0}
   ]),
 
