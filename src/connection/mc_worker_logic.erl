@@ -57,6 +57,7 @@ process_responses(Responses, RequestStorage) ->
        bws_metrics_man:db_write_to_response_time(Diff),
 
        true = ets:delete(RequestStorage, Id),
+       poolboy:dec_worker_size(bws_data_pool,self()),
        try Fun(Response) % call on-response function
        catch _:_ -> ok
        end

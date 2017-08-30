@@ -141,6 +141,8 @@ process_read_request(Request, From, State =
   Start = bws_utils:now_ts(),
   {ok, Id} = mc_worker_logic:make_request(Socket, NetModule, CS#conn_state.database, UpdReq, Counter),
 
+  poolboy:inc_worker_size(bws_data_pool,self()),
+
   Size = ets:info(RequestStorage,size),
 
   IsBlocked =
