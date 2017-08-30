@@ -12,7 +12,7 @@
 -include("mongo_protocol.hrl").
 
 %% API
--export([encode_requests/2, encode_requests/3, decode_responses/1, process_responses/2]).
+-export([encode_requests/2, encode_requests/3, decode_responses/1, process_responses/3]).
 -export([gen_index_name/1, make_request/4, make_request/5, get_resp_fun/2, update_dbcoll/2, collection/1]).
 
 encode_requests(Database, Request) when not is_list(Request) ->
@@ -46,8 +46,8 @@ get_resp_fun(Read, From) when is_record(Read, query); is_record(Read, getmore) -
 get_resp_fun(Write, From) when is_record(Write, insert); is_record(Write, update); is_record(Write, delete) ->
   process_write_response(From).
 
--spec process_responses(Responses :: list(), RequestStorage :: map()) -> UpdStorage :: map().
-process_responses(Responses, RequestStorage) ->
+-spec process_responses(Responses :: list(), RequestStorage :: map(), Parent :: pid()) -> UpdStorage :: map().
+process_responses(Responses, RequestStorage, Parent) ->
   [
      case ets:lookup(RequestStorage, Id) of
      [] -> % TODO: close any cursor that might be linked to this request ?
@@ -57,7 +57,7 @@ process_responses(Responses, RequestStorage) ->
        bws_metrics_man:db_write_to_response_time(Diff),
 
        true = ets:delete(RequestStorage, Id),
-       poolboy:dec_worker_size(bws_data_pool,self()),
+       poolboy:dec_worker_size(bws_data_pool,Parent),
        try Fun(Response) % call on-response function
        catch _:_ -> ok
        end

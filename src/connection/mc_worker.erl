@@ -61,7 +61,7 @@ init(Options) ->
     {requestid_counter, 0}
   ]),
 
-  ReadWorker = spawn_link(fun() -> read_worker(<<>>) end),
+  ReadWorker = spawn_link(fun() -> read_worker(<<>>,self()) end),
 
   erlang:send_after(1000, self(), size),
   gen_server:enter_loop(?MODULE, [],
@@ -215,19 +215,19 @@ get_set_opts_module(Options) ->
     false -> gen_tcp
   end.
 
-read_worker(Buffer)->
+read_worker(Buffer,Parent)->
   Pending =
   receive
   {Data, RequestStorage} ->
     FullData = <<Buffer/binary, Data/binary>>,
     {Responses, PendingData} = mc_worker_logic:decode_responses(FullData),
-    mc_worker_logic:process_responses(Responses, RequestStorage),
+    mc_worker_logic:process_responses(Responses, RequestStorage, Parent),
     PendingData
   ;
   _ ->
     Buffer
   end,
-  read_worker(Pending)
+  read_worker(Pending,Parent)
 .
 
 
