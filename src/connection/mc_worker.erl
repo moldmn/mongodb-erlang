@@ -61,7 +61,9 @@ init(Options) ->
     {requestid_counter, 0}
   ]),
 
-  ReadWorker = spawn_link(fun() -> read_worker(<<>>,self()) end),
+  WorkerPid = self(),
+
+  ReadWorker = spawn_link(fun() -> read_worker(<<>>,WorkerPid) end),
 
   erlang:send_after(1000, self(), size),
   gen_server:enter_loop(?MODULE, [],
