@@ -26,7 +26,8 @@
 ]).
 -export([
   count/3,
-  count/4
+  count/4,
+  sleep/2
 ]).
 -export([
   command/2,
@@ -202,6 +203,11 @@ count(Connection, Coll, Selector, Args = #{limit := Limit}) when Limit > 0 ->
 count(Connection, Coll, Selector, Args) ->
   ReadPref = maps:get(readopts, Args, #{<<"mode">> => <<"primary">>}),
   do_count(Connection, {<<"count">>, Coll, <<"query">>, Selector, <<"$readPreference">>, ReadPref}).
+
+-spec sleep(pid(), integer()) -> any().
+sleep(Connection, Time) ->
+  command(Connection, {<<"eval">>, <<"sleep">>, <<"args">>, [Time], <<"nolock">>, <<"true">>})
+.
 
 %% @doc Create index on collection according to given spec.
 %%      The key specification is a bson documents with the following fields:
