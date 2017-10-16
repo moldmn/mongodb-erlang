@@ -37,19 +37,18 @@ get_resp_fun(Write, From) when is_record(Write, insert); is_record(Write, update
 
 -spec process_responses(Responses :: list(), RequestStorage :: map()) -> UpdStorage :: map().
 process_responses(Responses, RequestStorage) ->
-  lists:foldl(
-    fun({Id, Response}, UReqStor) ->
-      case maps:find(Id, UReqStor) of
-        error -> % TODO: close any cursor that might be linked to this request ?
-          UReqStor;
-        {ok, Fun} ->
-          UpdReqStor = maps:remove(Id, UReqStor),
-          try Fun(Response) % call on-response function
-          catch _:_ -> ok
-          end,
-          UpdReqStor
-      end
-    end, RequestStorage, Responses).
+  [
+     case ets:lookup(RequestStorage, Id) of
+     [] -> % TODO: close any cursor that might be linked to this request ?
+       ok;
+     [{Id,Fun}] ->
+       true = ets:delete(RequestStorage, Id),
+       try Fun(Response) % call on-response function
+       catch _:_ -> ok
+       end
+     end
+    || {Id, Response} <- Responses]
+.
 
 gen_index_name(KeyOrder) ->
   bson:doc_foldl(
