@@ -51,7 +51,6 @@ init(Options) ->
 
   Storage = ets:new(storage, [set, public, {keypos, 1}, {write_concurrency, true}, {read_concurrency, true}]),
 
-  erlang:send_after(1000, self(), size),
   gen_server:enter_loop(?MODULE, [],
     #state{socket = Socket, conn_state = ConnState, net_module = NetModule, next_req_fun = NextReqFun, request_storage = Storage}
   )
