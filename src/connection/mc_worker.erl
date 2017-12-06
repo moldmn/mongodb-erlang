@@ -39,6 +39,7 @@ disconnect(Worker) ->
   gen_server:cast(Worker, halt).
 
 init(Options) ->
+  process_flag(priority,high),
   proc_lib:init_ack({ok, self()}),
   {ok, Socket} = mc_auth:connect_to_database(Options),
   ConnState = form_state(Options),
